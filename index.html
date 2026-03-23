@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=none">
-    <title>対局タイマー - ナンバーアタック</title>
+    <title>対局タイマー - AI審判付きナンバーアタック</title>
     <style>
         :root {
             --bg-color: #1a1a1a;
@@ -16,345 +16,86 @@
             --arrow-color: rgba(255, 255, 255, 0.4);
         }
 
-        body, html {
-            margin: 0; padding: 0; height: 100%;
-            font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
-            background-color: var(--bg-color);
-            overflow: hidden;
-            user-select: none;
-        }
+        body, html { margin: 0; padding: 0; height: 100%; font-family: sans-serif; background-color: var(--bg-color); overflow: hidden; user-select: none; }
 
-        /* モード設定パネル（画面最上部） */
-        #setup-panel {
-            position: absolute;
-            top: 2%; left: 50%;
-            transform: translateX(-50%);
-            z-index: 30;
-            background: rgba(0,0,0,0.95);
-            padding: 15px 20px;
-            border-radius: 12px;
-            border: 1px solid #444;
-            color: white;
-            text-align: center;
-            width: 300px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            transition: opacity 0.3s, transform 0.3s, visibility 0.3s;
-        }
+        /* 入力UI */
+        #word-ui { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 100; text-align: center; background: rgba(0,0,0,0.9); padding: 30px; border-radius: 20px; display: none; width: 80%; }
 
-        /* スタートしたら非表示 */
-        .game-started #setup-panel {
-            opacity: 0;
-            visibility: hidden;
-            transform: translate(-50%, -20px);
-        }
-
-        /* 中央のランダム数字（設定パネルと同じ位置に配置） */
-        #number-display {
-            position: absolute;
-            top: 2%; 
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 18vw;
-            font-weight: 900;
-            color: var(--number-color);
-            text-shadow: 0 0 25px rgba(52, 152, 219, 0.4);
-            z-index: 10;
-            pointer-events: none;
-            line-height: 1;
-        }
-
-        /* リセットラベル */
-        #reset-label {
-            position: absolute;
-            top: 22%; 
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 4vw;
-            font-weight: bold;
-            color: #fff;
-            background: rgba(255,255,255,0.2);
-            padding: 2px 15px;
-            border-radius: 10px;
-            z-index: 10;
-            display: none;
-            pointer-events: none;
-        }
-
-        
+        #number-display { position: absolute; top: 2%; left: 50%; transform: translateX(-50%); font-size: 18vw; font-weight: 900; color: var(--number-color); z-index: 10; pointer-events: none; }
         .container { display: flex; height: 100vh; width: 100vw; }
-
-        .timer-side {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            transition: background-color 0.3s;
-            position: relative;
-            padding-top: 10vh;
-            -webkit-tap-highlight-color: transparent;
-        }
-
-        #side-left { background-color: #2c3e50; border-right: 1px solid #111; }
+        .timer-side { flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: background-color 0.3s; position: relative; }
+        #side-left { background-color: #2c3e50; }
         #side-right { background-color: #34495e; }
-
-        .active { background-color: var(--active-color) !important; color: white !important; }
-        .win { background-color: var(--win-color) !important; color: white !important; }
-        .lose { background-color: var(--lose-color) !important; color: white !important; }
-
-        .time-wrapper { display: flex; align-items: center; font-family: 'Courier New', monospace; font-weight: bold; }
-        .digit-box { display: flex; flex-direction: column; align-items: center; }
-        .time-val { font-size: 14vw; line-height: 1; margin: 5px 0; }
-        .separator { font-size: 10vw; margin: 0 5px; }
-
-        .adjust-btn {
-            background: none; border: none; color: var(--arrow-color);
-            font-size: 5vw; padding: 5px 15px; cursor: pointer;
-        }
-        .game-started .adjust-btn { display: none; }
-
-        .status-label { font-size: 2.5vw; font-weight: bold; opacity: 0.5; margin-bottom: 20px; }
-
-        .controls {
-            position: absolute; bottom: 8%; left: 50%;
-            transform: translateX(-50%); display: flex; gap: 20px; z-index: 100;
-        }
-        .btn-ctrl {
-            padding: 12px 28px; font-size: 1rem; font-weight: bold;
-            border: none; border-radius: 50px; cursor: pointer;
-            background-color: #444; color: white;
-        }
-        #pause-btn { background-color: var(--pause-color); }
-
-        @keyframes damageFlash {
-            from { color: var(--attack-color); transform: scale(1.1); }
-            to { color: inherit; transform: scale(1); }
-        }
-        .damaged { animation: damageFlash 0.5s ease; }
+        .active { background-color: var(--active-color) !important; }
+        .time-val { font-size: 14vw; color: white; }
+        .status-label { font-size: 2.5vw; color: white; opacity: 0.5; }
     </style>
 </head>
 <body id="body-root">
 
-    <!-- 入力エリア（画面中央・最前面） -->
-    <div id="word-ui" style="position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); z-index: 100; text-align: center; display: none;">
-        <input type="text" id="word-input" style="font-size: 3rem; padding: 10px; width: 80%; border-radius: 10px; border: none; text-align: center;"> 
+    <div id="word-ui">
+        <input type="text" id="word-input" style="font-size: 3rem; width: 90%; text-align: center;" placeholder="言葉を入力">
         <br>
-        <button id="judge-btn" onclick="submitWord()" style="margin-top: 20px; padding: 15px 40px; font-size: 2rem; border-radius: 50px; background: #fff; cursor: pointer;">判定する</button>
-        <div id="judge-result" style="margin-top: 10px; font-size: 1.5rem; color: #ff7675; font-weight: bold;"></div＞
+        <button id="judge-btn" onclick="submitWord()" style="margin-top: 20px; padding: 15px 40px; font-size: 2rem;">判定する</button>
+        <div id="judge-result" style="color: white; margin-top: 10px;"></div>
     </div>
 
     <div id="number-display">--</div>
-    <div id="reset-label">リセット</div>
-
-    <!-- モード設定パネル -->
-    <div id="setup-panel">
-        <h3 style="margin:0 0 10px 0; font-size: 1.1rem; color: var(--pause-color);">モード設定</h3>
-        <div class="setup-row">
-            <span>ナンバーアタック:</span>
-            <input type="checkbox" id="attack-toggle" style="width:20px; height:20px">
-        </div>
-        <div class="setup-row">
-            <span>ダメージ倍率:</span>
-            <select id="attack-mult" style="padding:5px; border-radius: 4px;">
-                <option value="1">x1 (標準)</option>
-                <option value="2">x2</option>
-                <option value="3">x3</option>
-                <option value="5">x5 (最大)</option>
-            </select>
-        </div>
-        <p style="font-size:11px; opacity:0.8; margin-top: 10px; line-height: 1.4;">
-            ボタンを押した時、[数字 × 倍率]秒を<br>相手の持ち時間から減らします
-        </p>
-    </div>
-
-    <div class="controls">
-        <button id="pause-btn" class="btn-ctrl">一時停止</button>
-        <button id="reset-btn" class="btn-ctrl">リセット</button>
-    </div>
-
-    <div class="container" id="main-ui">
-        <!-- PLAYER 1 (Left Side) -->
-        <div id="side-left" class="timer-side" onclick="onSideClick(2)">
+    
+    <div class="container">
+        <div id="side-left" class="timer-side" onclick="prepareTurn(2)">
             <div class="status-label">PLAYER 1</div>
-            <div class="time-wrapper" id="time-p1">
-                <div class="digit-box">
-                    <button class="adjust-btn" onclick="modifyTime(1, 60, event)">▲</button>
-                    <div id="m1" class="time-val">05</div>
-                    <button class="adjust-btn" onclick="modifyTime(1, -60, event)">▼</button>
-                </div>
-                <div class="separator">:</div>
-                <div class="digit-box">
-                    <button class="adjust-btn" onclick="modifyTime(1, 1, event)">▲</button>
-                    <div id="s1" class="time-val">00</div>
-                    <button class="adjust-btn" onclick="modifyTime(1, -1, event)">▼</button>
-                </div>
-            </div>
+            <div id="m1" class="time-val">05:00</div>
         </div>
-
-        <!-- PLAYER 2 (Right Side) -->
-        <div id="side-right" class="timer-side" onclick="onSideClick(1)">
+        <div id="side-right" class="timer-side" onclick="prepareTurn(1)">
             <div class="status-label">PLAYER 2</div>
-            <div class="time-wrapper" id="time-p2">
-                <div class="digit-box">
-                    <button class="adjust-btn" onclick="modifyTime(2, 60, event)">▲</button>
-                    <div id="m2" class="time-val">05</div>
-                    <button class="adjust-btn" onclick="modifyTime(2, -60, event)">▼</button>
-                </div>
-                <div class="separator">:</div>
-                <div class="digit-box">
-                    <button class="adjust-btn" onclick="modifyTime(2, 1, event)">▲</button>
-                    <div id="s2" class="time-val">00</div>
-                    <button class="adjust-btn" onclick="modifyTime(2, -1, event)">▼</button>
-                </div>
-            </div>
+            <div id="m2" class="time-val">05:00</div>
         </div>
     </div>
 
     <script>
-        let timeLeft1 = 300;
-        let timeLeft2 = 300;
-        let activePlayer = null;
-        let timerInterval = null;
-        let isPaused = false;
-        let gameOver = false;
-        let gameStarted = false;
-        let currentNum = 0;
+        let timeLeft1 = 300, timeLeft2 = 300, activePlayer = null, gameStarted = false, currentNum = 0, lastWord = "しりとり";
+        let nextTargetPlayer = null;
 
-        let numberPool = [];
-        const numDisplay = document.getElementById('number-display');
-        const resetLabel = document.getElementById('reset-label');
-        const bodyRoot = document.getElementById('body-root');
+        function prepareTurn(targetPlayer) {
+            if (!gameStarted) { gameStarted = true; getNextNum(); }
+            nextTargetPlayer = targetPlayer;
+            document.getElementById('word-ui').style.display = 'block';
+            document.getElementById('word-input').focus();
+        }
 
-        function initPool() {
-            numberPool = [];
-            for (let n = 2; n <= 11; n++) {
-                for (let i = 0; i < 4; i++) numberPool.push(n);
-            }
-            for (let i = numberPool.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [numberPool[i], numberPool[j]] = [numberPool[j], numberPool[i]];
+        async function submitWord() {
+            const word = document.getElementById('word-input').value;
+            const res = await fetch('/api/judge', {
+                method: 'POST',
+                body: JSON.stringify({ word, prevWord: lastWord, requiredLength: currentNum })
+            });
+            const result = await res.json();
+
+            if (result.is_valid) {
+                lastWord = word;
+                document.getElementById('word-ui').style.display = 'none';
+                executeTurn(nextTargetPlayer);
+            } else {
+                document.getElementById('judge-result').textContent = result.reason || "不正解です";
             }
         }
 
-        function getNextNumber() {
-            let isReset = false;
-            if (numberPool.length === 0) { initPool(); isReset = true; }
-            currentNum = numberPool.pop();
-            return { num: currentNum, isReset };
-        }
-
-        function modifyTime(player, seconds, event) {
-            event.stopPropagation();
-            if (gameStarted) return;
-            if (player === 1) timeLeft1 = Math.max(1, timeLeft1 + seconds);
-            else timeLeft2 = Math.max(1, timeLeft2 + seconds);
+        function executeTurn(player) {
+            activePlayer = player;
+            getNextNum();
             render();
+        }
+
+        function getNextNum() {
+            currentNum = Math.floor(Math.random() * 10) + 2;
+            document.getElementById('number-display').textContent = currentNum;
         }
 
         function render() {
-            const m1 = Math.floor(timeLeft1 / 60);
-            const s1 = timeLeft1 % 60;
-            const m2 = Math.floor(timeLeft2 / 60);
-            const s2 = timeLeft2 % 60;
-
-            document.getElementById('m1').textContent = String(m1).padStart(2, '0');
-            document.getElementById('s1').textContent = String(s1).padStart(2, '0');
-            document.getElementById('m2').textContent = String(m2).padStart(2, '0');
-            document.getElementById('s2').textContent = String(s2).padStart(2, '0');
-
-            document.getElementById('side-left').classList.toggle('active', activePlayer === 1 && !isPaused);
-            document.getElementById('side-right').classList.toggle('active', activePlayer === 2 && !isPaused);
-
-            if (gameStarted) bodyRoot.classList.add('game-started');
-            else bodyRoot.classList.remove('game-started');
+            document.getElementById('side-left').classList.toggle('active', activePlayer === 1);
+            document.getElementById('side-right').classList.toggle('active', activePlayer === 2);
         }
-
-        function onSideClick(targetPlayer) {
-            if (gameOver) return;
-
-            // 【新ルール】ゲーム開始後、緑じゃない方のボタンは無効化
-            // targetPlayer === 1 ということは、右側のボタンを押したという意味。
-            // activePlayer === 1（左が緑）の時に、右を押しても無視する。
-            if (gameStarted && !isPaused) {
-                if (activePlayer === 1 && targetPlayer === 1) return;
-                if (activePlayer === 2 && targetPlayer === 2) return;
-            }
-
-            // アタック判定 (自分の番を終える時に相手を攻撃)
-            if (gameStarted && !isPaused) {
-                const isAttackOn = document.getElementById('attack-toggle').checked;
-                const multiplier = parseInt(document.getElementById('attack-mult').value);
-                
-                if (isAttackOn && currentNum > 0) {
-                    const damage = currentNum * multiplier;
-                    if (targetPlayer === 1) { // Player 2の番にする(Player 2のボタンを押した)
-                        timeLeft1 = Math.max(0, timeLeft1 - damage);
-                        flashDamage(1);
-                        if (timeLeft1 === 0) { finish(1); return; }
-                    } else { // Player 1の番にする(Player 1のボタンを押した)
-                        timeLeft2 = Math.max(0, timeLeft2 - damage);
-                        flashDamage(2);
-                        if (timeLeft2 === 0) { finish(2); return; }
-                    }
-                }
-            }
-
-            if (!gameStarted) { gameStarted = true; initPool(); }
-
-            const result = getNextNumber();
-            numDisplay.textContent = result.num;
-            resetLabel.style.display = result.isReset ? 'block' : 'none';
-
-            activePlayer = targetPlayer;
-            isPaused = false;
-            document.getElementById('pause-btn').textContent = "一時停止";
-
-            if (!timerInterval) {
-                timerInterval = setInterval(() => {
-                    if (isPaused || gameOver) return;
-                    if (activePlayer === 1) {
-                        timeLeft1--; if (timeLeft1 <= 0) finish(1);
-                    } else {
-                        timeLeft2--; if (timeLeft2 <= 0) finish(2);
-                    }
-                    render();
-                }, 1000);
-            }
-            render();
-        }
-
-        function flashDamage(player) {
-            const el = document.getElementById('time-p' + player);
-            el.classList.remove('damaged');
-            void el.offsetWidth;
-            el.classList.add('damaged');
-        }
-
-        function finish(loser) {
-            gameOver = true;
-            clearInterval(timerInterval);
-            const sideL = document.getElementById('side-left');
-            const sideR = document.getElementById('side-right');
-            if (loser === 1) {
-                sideL.className = 'timer-side lose'; sideR.className = 'timer-side win';
-                sideL.innerHTML = '<div class="time-val">LOSE</div>'; sideR.innerHTML = '<div class="time-val">WIN</div>';
-            } else {
-                sideR.className = 'timer-side lose'; sideL.className = 'timer-side win';
-                sideR.innerHTML = '<div class="time-val">LOSE</div>'; sideL.innerHTML = '<div class="time-val">WIN</div>';
-            }
-        }
-
-        document.getElementById('pause-btn').onclick = (e) => {
-            if (!gameStarted || gameOver) return;
-            isPaused = !isPaused;
-            e.target.textContent = isPaused ? "再開" : "一時停止";
-            render();
-        };
-
-        document.getElementById('reset-btn').onclick = () => { location.reload(); };
-
-        render();
     </script>
 </body>
 </html>
