@@ -1,26 +1,28 @@
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).end();
     try {
-        const { word, prevWord, requiredLength } = JSON.parse(req.body);
+        const body = JSON.parse(req.body);
+        const { word, prevWord, requiredLength } = body;
         const apiKey = process.env.GEMINI_API_KEY;
+
+        if (!apiKey) throw new Error("APIキーが見つかりません");
 
         const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                contents: [{ parts: [{ text: `{"word":"${word}","prevWord":"${prevWord}","length":${requiredLength}} を判定し、JSONのみで {"is_valid": true, "reason": "OK"} と回答してください。` }] }]
+                contents: [{ parts: [{ text: `直前「${prevWord}」に対し「${word}」は(${requiredLength}文字、実在)か？JSONで{"is_valid": true, "reason": "OK"}と返せ` }] }]
             })
         });
 
         const data = await response.json();
-        // ここが一番のポイント：AIの返事からJSON部分だけを抜き出す
-        const text = data.candidates[0].content.parts[0].text;
-        const jsonString = text.replace(/```json|```/g, '').trim();
         
-        res.status(200).json(JSON.parse(jsonString));
+        // エラー詳細をチェック
+        if (data.error) throw new Error(data.error.message);
+        
+        const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
+        res.status(200).json(JSON.parse(text));
     } catch (error) {
-        // 何が起きたかログに出す（VercelのLogsタブで見れます）
-        console.error("エラー詳細:", error);
-        res.status(500).json({ is_valid: false, reason: "通信エラー発生" });
+        // ここでエラーの内容をレスポンスとして返す
+        res.status(500).json({ is_valid: false, reason: "通信エラー: " + error.message });
     }
 }
