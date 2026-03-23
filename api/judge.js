@@ -9,21 +9,21 @@ export default async function handler(req, res) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ 
-                    parts: [{ text: `
-                        ルール: 直前の言葉「${prevWord}」に対して、入力「${word}」が (${requiredLength}文字、実在する言葉、しりとり成立) か判定せよ。
-                        必ず{"is_valid": true/false, "reason": "理由"}の形式のJSONのみを出力せよ。他の文字は一切入れるな。` 
-                    }] 
+                    parts: [{ text: `{"word":"${word}","prevWord":"${prevWord}"} を判定して。ルールは(${requiredLength}文字、実在、しりとり)。必ず以下のJSONのみを出力せよ：{"is_valid": true, "reason": "OK"}` }] 
                 }]
             })
         });
 
         const data = await response.json();
+        const rawText = data.candidates[0].content.parts[0].text;
         
-        // テキストを取り出し、空白や改行を除去
-        const text = data.candidates[0].content.parts[0].text.replace(/```json|```|\n/g, '').trim();
+        // 【重要】最初の { から 最後の } までを強引に切り出す
+        const start = rawText.indexOf('{');
+        const end = rawText.lastIndexOf('}');
+        const jsonString = rawText.substring(start, end + 1);
         
-        res.status(200).json(JSON.parse(text));
+        res.status(200).json(JSON.parse(jsonString));
     } catch (error) {
-        res.status(500).json({ is_valid: false, reason: "通信エラー: AI応答がJSONではありませんでした" });
+        res.status(500).json({ is_valid: false, reason: "AIの答えがJSONではありませんでした" });
     }
 }
