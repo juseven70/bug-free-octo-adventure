@@ -4,30 +4,26 @@ export default async function handler(req, res) {
         const { word, prevWord, requiredLength } = JSON.parse(req.body);
         const apiKey = process.env.GEMINI_API_KEY;
 
-        // モデルを確実に指定するためのURL
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:runGenerateContent?key=${apiKey}`;
-
-        const response = await fetch(url, {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 contents: [{ 
-                    parts: [{ text: `あなたはしりとりの審判です。直前の言葉「${prevWord}」に対し、今回の入力「${word}」は(${requiredLength}文字、実在、末尾一致)か？JSONで{"is_valid": true, "reason": "OK"} とだけ返せ。` }] 
+                    parts: [{ text: `
+                        ルール: 直前の言葉「${prevWord}」に対して、入力「${word}」が (${requiredLength}文字、実在する言葉、しりとり成立) か判定せよ。
+                        必ず{"is_valid": true/false, "reason": "理由"}の形式のJSONのみを出力せよ。他の文字は一切入れるな。` 
+                    }] 
                 }]
             })
         });
 
         const data = await response.json();
         
-        // エラー詳細ログ
-        if (data.error) {
-             console.error("Gemini API Error:", data.error);
-             throw new Error(data.error.message);
-        }
+        // テキストを取り出し、空白や改行を除去
+        const text = data.candidates[0].content.parts[0].text.replace(/```json|```|\n/g, '').trim();
         
-        const text = data.candidates[0].content.parts[0].text.replace(/```json|```/g, '').trim();
         res.status(200).json(JSON.parse(text));
     } catch (error) {
-        res.status(500).json({ is_valid: false, reason: "通信エラー: " + error.message });
+        res.status(500).json({ is_valid: false, reason: "通信エラー: AI応答がJSONではありませんでした" });
     }
 }
